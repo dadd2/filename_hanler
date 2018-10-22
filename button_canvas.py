@@ -1,5 +1,8 @@
 from tkinter import *
 
+# TODO bug track: когда долбишь одну из стрелочек и при этом происходит set_clicable_state, может не обновиться bg
+
+
 class ButtonCanvas(Canvas):
     """предоставляет кнопочки увелчить/уменьшить для числовых полей"""
     def __init__(self, *args, w=20, h=20,
@@ -19,15 +22,17 @@ class ButtonCanvas(Canvas):
         self.create_rectangle([0, 0], [w, h/2], fill=self.colors[0], tag='up')
         self.create_rectangle([0, h/2], [w, h], fill=self.colors[0], tag='down')
 
-        l=4
-        k=2
+        l = 4
+        k = 2
+        text_bias = 2
         self.create_line([w/2-l, h/4+k], [w/2, h/4-k], [w/2+l, h/4+k], fill=self.colors[1], tag='up_arrow')
         self.create_line([w/2-l, h*3/4-k], [w/2, h*3/4+k], [w/2+l, h*3/4-k], fill=self.colors[1], tag='down_arrow')
         
         # print(self.letters)
         default_text = [self.letters[i][0] if self.letters[i] is not None else ' ' for i in [0, 1]]
-        self.create_text([w/2, h/4], text=default_text[0], fill=self.colors[2], tag='up_letter')
-        self.create_text([w/2, h*3/4], text=default_text[1], fill=self.colors[2], tag='down_letter')
+        self.create_text([w/2, h*2/4], anchor=S, text=default_text[0], fill=self.colors[2], tag='up_letter')
+        self.create_text([w/2, h*2/4 - text_bias], anchor=N,text=default_text[1], fill=self.colors[2],
+                         tag='down_letter')
         
         def get_callback(kind, direction):
             return lambda event: self.clickable_callback(kind, direction)
@@ -61,10 +66,13 @@ class ButtonCanvas(Canvas):
                 if event.char in self.letters[i]:
                     self.itemconfig(kind, fill=self.colors[::2][1-di])
                     self.itemconfig(kind + '_arrow', fill=self.colors[::2][di])
-                    self.itemconfig(kind + '_letter', fill=self.colors[::1][di])
-            if direction == 'down':
-                return True
-        return False
+                    # print(self.colors[::2], di)
+                    self.itemconfig(kind + '_letter', fill=self.colors[::2][di])
+                    if direction == 'Release':
+                        # print('key downwsws')
+                        self.external_callback(kind, direction, 'key')
+                    break
+
     
     def clickable_callback(self, kind, direction):
         if not self.clicable_state:
@@ -81,5 +89,5 @@ class ButtonCanvas(Canvas):
         di = directions.index(direction)
         self.itemconfig(kind, fill=self.colors[1-di])
         self.itemconfig(kind + '_arrow', fill=self.colors[di])
-        if direction == 'Press':
-            self.external_callback(kind, direction)
+        if direction == 'Release':
+            self.external_callback(kind, direction, 'click')

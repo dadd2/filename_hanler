@@ -4,6 +4,8 @@ from button_canvas import ButtonCanvas
 from tkinter import *
 from tkinter import messagebox
 import time
+import copy
+
 
 # ui elements:
 # counter of bad files (an other statistics...)
@@ -13,6 +15,8 @@ import time
 # todo:
 # embed russification possibility
 # сделать какое-нибудь мигание при обновлении данных
+
+
 class ListDict(list):
     def __init__(self):
         super().__init__()
@@ -33,7 +37,7 @@ class ListDict(list):
         else:
             raise TypeError('key should be int or str')
     
-    def get_withkeys():
+    def get_withkeys(self):
         return [self[i] for k, i in sorted(self.__keys.items(), key=lambda pair: pair[1])]
 
 
@@ -42,9 +46,12 @@ class TkinterFilesHandler:
     def __init__(self, data_location):
         """первая стадия инициализации, до создания FileHandler (остальное -- при вызове mainloop)"""
         self.is_working = True
-        self.init_complete = False # unuseful flag; should be removed
+        self.init_complete = False  # unuseful flag; should be removed
         self.data_location = data_location
 
+        self.ui_config = {
+            "lists_patterns": []
+        }
         self.entrys_elems_collection = []
         self.formatters_content = []
         self.lists_items = {'lists': [], 'scrolls': []}
@@ -107,12 +114,12 @@ class TkinterFilesHandler:
             self.lists_items['lists'][-1]['yscrollcommand'] = self.lists_items['scrolls'][-1].set
             self.lists_items['lists'][-1].place(la)
             self.lists_items['scrolls'][-1].place(sa)
-        for line in ['todo:', '- lists filling', '- messages', '- autoincrem', '- key press', '- color indicate unfocus']:
+        for line in ['todo:', '- messages', '- color indicate unfocus', '- work with pause condition']:
             self.lists_items['lists'][0].insert(END, line)
         
         def get_command(text):
             return lambda: self.button_elem_callback(text + 'bt')
-        for i, text in enumerate(['correct', 'reset', 'pause', 'lock']):
+        for i, text in enumerate(['correct', 'reset', 'pause', 'lock', 'apply']):
             self.button_elems_coolection[text + 'bt'] = (Button(self.buttons_frame, text=text, command = get_command(text)))
             self.button_elems_coolection[text + 'bt'].pack(side=LEFT)
     
@@ -152,7 +159,7 @@ class TkinterFilesHandler:
             elif isinstance(elem, list):
                 if elem[0] == 'int':
                     def get_callback(i):
-                        return lambda kind, direction: self.arrows_callback(i, kind)
+                        return lambda kind, direction, source: self.arrows_callback(i, kind, source)
                     self.entrys_elems_collection.append(Entry(
                         self.entrys_frame,
                         width=elem[1],
@@ -183,10 +190,10 @@ class TkinterFilesHandler:
 
     def button_elem_callback(self, btname):
         '''обработка вызова кнопок correct, reset, lock/unlock, pause/resume'''
-        print('button_elem_callback', btname)
         text = self.button_elems_coolection[btname]['text']
+        print('button_elem_callback', btname, text)
         if btname == 'lockbt':
-            self.lock_switch(state=['normal', 'disabled'][1-['lock', 'unlock'].index(text)])
+            self.lock_switch(state=['normal', 'disabled'][1-('lock', 'unlock').index(text)])
         elif btname == 'pausebt':
             [self.fh.pause, self.fh.resume][('pause', 'resume').index(text)]()
         elif btname == 'correctbt':
@@ -194,11 +201,12 @@ class TkinterFilesHandler:
         elif btname == 'resetbt':
             self.fh.reset()
     
-    def arrows_callback(self, i_, kind):
-        print(i_, self.formatters_content)
+    def arrows_callback(self, i_, kind, source):
+        """is called from lambda which defined in _init_2"""
+        # print(i_, self.formatters_content)
         i = [i for i, (j, k) in enumerate(self.formatters_content) if j == i_][0]
-        print(i)
-        self.fh.modifier_increm(i, [1, -1][('up', 'down').index(kind)])
+        # print(i)
+        self.fh.modifier_increm(i, [1, -1][('up', 'down').index(kind)], save_others=source=='click')
     
     def keys_callback(self, event, direction):
         for j, k in self.formatters_content:
@@ -216,9 +224,11 @@ class TkinterFilesHandler:
             self.entrys_elems_collection[j]['state'] = state
             self.entrys_elems_collection[j+1].set_clickable_state(1-i)
         self.button_elems_coolection['correctbt'].config(state=state)
+        self.button_elems_coolection['applybt'].config(state=state)
         self.button_elems_coolection['lockbt'].config(text=('lock', 'unlock')[i])
 
     def pause_switch(self, direction='pause'):
+        print('pause switch', direction, time.strftime('%T'))
         directions = ('pause', 'resume')
         states = ('normal', 'disabled')
         i = directions.index(direction)
@@ -226,6 +236,7 @@ class TkinterFilesHandler:
         self.lock_switch(states[i])
         self.button_elems_coolection['pausebt'].config(text=directions[1-i])
         self.button_elems_coolection['lockbt'].config(state=states[i])
+        self.button_elems_coolection['applybt'].config(state=states[i])
 
     def get_modifiers(self):
         """вызывается из FileHandler, возвращает массив из entrys"""
@@ -252,13 +263,29 @@ class TkinterFilesHandler:
         # update statistics
 
         # print(self.fh.validate(self.get_modifiers()))
-        if self.fh.paused:
-            for (j, i), flag in zip(self.formatters_content, self.fh.validate(self.get_modifiers())):
-                self.entrys_elems_collection[j]['bg'] = self.pal['entrys'][not flag]
+        # if self.fh.paused:
+        #     for (j, i), flag in zip(self.formatters_content, self.fh.validate(self.get_modifiers())):
+        #         self.entrys_elems_collection[j]['bg'] = self.pal['entrys'][not flag]
+        # ------------ update lists:
+        for i, key in enumerate(('files_cooking', 'files_ready', 'files_history')):
+            old, new = self.dumps[key], getattr(self.fh, key)
+            if old != new:
+                if i == 2:
+                    for finfo in new[len(old):]:
+                        self.lists_items['lists'][i].insert(0, '{fname-new} / {fname}'.format(**finfo))
+
+                else:
+                    self.lists_items['lists'][i].delete(0, END)
+                    for finfo in new:
+                        self.lists_items['lists'][i].insert(END, '{stage} {fname}'.format(**finfo))
+                # print(key, old, new, sep='\n', end='\n\n' + '-'*30 + '\n')
+            self.dumps[key] = copy.deepcopy(new)
+        # ------------ update statistics:
         self.stat_elems_collection['stats']['last_upd']['text'] = time.strftime('%T')
         newtime = time.time()
         self.stat_elems_collection['stats']['fps']['text'] = round(1 / (newtime - self.statistics['lasttime']), 1)
         self.statistics['lasttime'] = newtime
+        # ------------ support loop
         self.root.update()
         if self.is_working:
             self.root.after(100, self.update)
