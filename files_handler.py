@@ -6,9 +6,26 @@ import pprint
 import copy
 import json
 
+# TODO 2019:
+# - перенести chunksize (при копировании) в json настроек
+# - оценить состояние проекта; перенести все TODO в отдельный файл
+# - сделать норм описание, например:                 !!!!!!!!!!!!!!!АААААА
+#   - краткая формулировка;
+#   - комментарии к входным данным;
+#   - суть процесса (стадии, заметки к формулам и прочая);
+#   - описание вывода, побочников и прочая;
+#   - TODO-раздел;
+# - сделать string-паттерны (свой текст; выбор из списка), но это потом
+# - реализовать уже наконец чтение настроек откуда нада
+#   - рабочие настройки, в буфере приложения
+#   - экспорт/импорт в файл
+# - переделать описание инта по шаблону: минимальное значение, максимальное значение
+# - написать логирование; вывести опцию в settings
+# - нарисовать в какой-нить проге модель взаимодействия всей этой гажи
+
 # TODO:
 # - error tracking
-# - whatto do if filename is in use
+# - whatto do if filename is in use (возможно, имелось в виду destination filename)
 # + stop the process if >1 file cooked (optional) or old files
 # + make independence of what time is using on host computer
 # - settings editing scheme (how user do it?)
@@ -48,7 +65,9 @@ base_settings = {
         '-',
         ['int', 3, 1, True, False, ['w', 's']],
         '-',
-        ['int', 1, 1, True, True, ['e', 'd']],
+        ['int', 1, 1, True, False, ['e', 'd']],
+        '=',
+        ['int', 2, 1, True, True, ['r', 'f']],
         ['ext']
     ],
     "size-cooked": 50,
@@ -84,7 +103,7 @@ def fmove(src, dst, chunk=1024*512):
 
 
 def soft_open(path, mode='r', ok_callback = lambda f:f.read(), err_callback = lambda e: ''):
-    """открывает файл; при успехе -- один колбэк, при ошибки -- второй"""
+    """открывает файл; при успехе -- один колбэк, при ошибке -- второй"""
     try:
         with open(path, mode) as file:
             return ok_callback(file)
@@ -93,7 +112,7 @@ def soft_open(path, mode='r', ok_callback = lambda f:f.read(), err_callback = la
 
 
 class ConsoleUI:
-    """костыль для дебага"""
+    """костыль для пробных запусков"""
     def __init__(self):
         pass
     
@@ -122,6 +141,8 @@ class ConsoleUI:
     def set_modifiers(self, modifiers):
         raise NotImplementedError()
 
+    def set_incorrect(self, correct_flags):
+        print('correct_flags:', correct_flags)
 
 class FilesHandler:
     """главный класс, который лежит под капотом у tkinterui, содержит всю логику отслеживания и управления файлами"""
@@ -155,9 +176,11 @@ class FilesHandler:
     
     def get_directory_content(self, is_first):
         """возвращает массив из fileinfos
+        (каждое fileinfo -- словарь из ino, size, stage, fname, addtime, ...)
 
         есть обработка отстающего времени в src-папке, но нет опережающего
-        нет никакой обработки перебоев связи. ВООБЩЕ НИКАКОЙ"""
+        нет никакой обработки перебоев связи. ВООБЩЕ НИКАКОЙ
+        TODO писать тесты на всякие шутки со временем"""
         for fname in os.listdir(self.settings['source-folder']):
             for pattern in self.settings['file-excluding-patterns']:
                 if re.search(pattern, fname):
@@ -166,6 +189,7 @@ class FilesHandler:
                 st = os.stat(os.path.join(self.settings['source-folder'], fname))
                 result = {'ino': st.st_ino, 'size': st.st_size, 'stage': 0, 'fname': fname}
                 if is_first:
+                    # TODO вставить обработку опережения
                     result['addtime'] = st.st_mtime
                 else:
                     result['addtime'] = time.time()
@@ -179,6 +203,7 @@ class FilesHandler:
 
         параметр is_first на случай, если это файлы, который были до запуска проги
 
+        Список смысловых разделов функции:
         - проводит учёт новых файлов
         - удаляет исчезнувшие файлы, если такие были
         - обновляет изменившуюся инфу (размер/имя/...)
@@ -291,7 +316,8 @@ class FilesHandler:
         # - distribute flags updates between UI and FH (main point is who cares about stopping)
 
     def validate(self, modifiers):
-        """проверяет последовательность кусков имени файла на вшивость"""
+        """проверяет последовательность кусков имени файла на вшивость
+        при типе паттерна str кидает NotImplementedError"""
         patterns = [x for x in self.settings['name-pattern'] if isinstance(x, list) and x[0] in ['int', 'str']]
         assert len(modifiers) == len(patterns), (len(modifiers), len(patterns))
         result = [True for m in modifiers]
@@ -314,6 +340,9 @@ class FilesHandler:
         return result
     
     def correct(self):
+        """меняет вшивые куски имени файла на подходящие невшивые
+        при типе паттерна str кидает NotImplementedError"""
+
         modifiers = self.ui.get_modifiers()
         patterns = [x for x in self.settings['name-pattern'] if isinstance(x, list) and x[0] in ['int', 'str']]
         assert len(modifiers) == len(patterns)
@@ -332,8 +361,10 @@ class FilesHandler:
             elif p[0] == 'str':
                 raise NotImplementedError()
         self.ui.set_modifiers(modifiers)
+        self.ui.set_incorrect(self.validate(modifiers))
     
     def modifiers_apply(self, modifiers, ext):
+        """возвращает готовое имя файла"""
         result = ''
         i = 0
         for p in self.settings['name-pattern']:
@@ -353,6 +384,9 @@ class FilesHandler:
         self.correct()
 
     def modifier_increm(self, index, count, save_others=False):
+        """изменяет кусок имени файла с обработками всякий ошибок
+        побочный эффект: обращение к UI
+        в конце вызывает correct на всякий случай"""
         assert count in (1, -1)
         patterns = [x for x in self.settings['name-pattern'] if isinstance(x, list) and x[0] in ['int', 'str']]
         intpatterns = [i for i, x in enumerate(patterns) if x[0] == 'int']
@@ -374,13 +408,41 @@ class FilesHandler:
         # print('incremed modifiers', modifiers)
 
     def ui_setup(self):
-        '''вызывается в начале, когда не понятно, что вообще происходит'''
+        '''вызывается в начале, когда не понятно, что вообще происходит
+        (вызывается один раз в конце TkinterFilesHandler._init_2)
+        Пока что только синхронизирует статус pause между собой и UI
+        todo: выяснить и описать, какой баг перекрывает '''
         self.ui.pause_switch(('resume', 'pause')[self.paused])
-
+    
+    def autoincrement(self):
+        '''not implemented; должен выискивать флаг autoincrement и прибавлять конкретный модифиер'''
+        raise NotImplementedError('да напешы ти уже... =)')
+    
     def file_move(self):
         """Вторая важная функция после mainloop_cycle. Надо выяснить и записать, как она работает.
-        Работа ф-ции не завивит от состояния флага paused"""
-        # TODO work here
+        Работа ф-ции не завивит от состояния флага paused...
+
+        Схема работы:
+        Подготовка:
+        - копирует текущие modifiers
+        - делает autoincrement (нерабочий; FIXME)
+        - пытается упасть при invalid modifiers
+        - проверяет, есть ли files_ready (если пусто -- конец ф-ции)
+        Работа:
+        - Применение силы:
+            - pop первый в списке files_ready
+            - fmove под новым именем из modifiers
+        - Коррекция метаданных:
+            - добавляем move-time и прочая
+            - вызываем функцию history_write, которая ничего не делает)
+            - 
+
+        TODO: 
+        - обработка invalid_modifiers;
+        - добавить finfo['new_ino']
+        - вообще написать работу с ino, ну или хотябы выбор...
+        - выпилить дурацкое логирование принтами"""
+
         modifiers = copy.deepcopy(self.ui.get_modifiers())
         self.modifier_increm(len(modifiers)-1, 1)
         if not all(self.validate(modifiers)):
@@ -401,27 +463,32 @@ class FilesHandler:
 
             self.last_update_time['ready'] = time.time()
             self.last_update_time['history'] = time.time()
-        print('FH file move: EOfunction')
+        print('FH file move: EOfunction')  # это вообще чё?
 
     def history_write(self, s):
-        """функция, которая должна с использованием soft_open логировать перемещённые файлы"""
+        """функция, которая должна с использованием soft_open логировать перемещённые файлы
+        TODO: придумать, как при запуске из неё заполнять """
         print('file done:', s)
         if self.settings['history-file'] is not None:
-            raise Warning('write this f')
+            raise NotImplementedError('write this f; это логирование не работаеть')
     
     def pause(self):
-        """self.paused = True"""
+        """просто self.paused = True, ну ещё обращение к UI с тем же..."""
         self.paused = True
         self.ui.pause_switch('pause')
     
     def resume(self):
         """if modifiers are valid -- moves file; if no files left -- resumes
-        calls ui.resume if ok"""
+        calls ui.resume if ok
+        if modifiers are invalid -- callse ui.set_incorrect
+
+        TODO: сделать человекопонятные if-else вместо raise/return"""
         if not self.paused:
             raise Warning('there was nothing to resume...')
-
-        if not all(self.validate(self.ui.get_modifiers())):
-            raise Warning('some modifiers are invalid')
+        validate_result = self.validate(self.ui.get_modifiers())
+        if not all(validate_result):
+            self.ui.set_incorrect(validate_result)
+            return
         if self.files_ready:
             print('FH resume: file move')
             self.file_move()
@@ -433,7 +500,7 @@ class FilesHandler:
             self.ui.pause_switch('resume')
     
     def settings_change(self):
-        """функция, которая должна решать, какие изменения можна без перезагрузки; валиднуть новые settings и проч"""
+        """not implemented; функция, которая должна решать, какие изменения можна без перезагрузки; валиднуть новые settings и проч"""
         raise NotImplementedError()
 
 if __name__ == '__main__':

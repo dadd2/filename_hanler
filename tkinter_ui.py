@@ -1,5 +1,6 @@
 import files_handler
 from button_canvas import ButtonCanvas
+# from getattrable_dict import OrderedDict as ListDict
 
 from tkinter import *
 from tkinter import messagebox
@@ -7,6 +8,14 @@ import time
 import copy
 import time
 
+# TODO 2019:
+# - переписать с OrderedDict
+# - добавить "паузу" после сна
+# - изменить логику кнопок pause/unlock
+# - добавить кнопки перемешения вверх/вниз в списке
+# - разобраться с отображением времени
+# - ДОЛБАНЫЕ ЦВЕТА
+# - 
 oldsize = [0]
 # ui elements:
 # counter of bad files (an other statistics...)
@@ -17,7 +26,7 @@ oldsize = [0]
 # embed russification possibility
 # сделать какое-нибудь мигание при обновлении данных
 GRADS = [' '] + [chr(i) for i in range(9615, 9607, -1)]
-
+HGRADS = [chr(i) for i in range(9608, 9600, -1)] + [' ']
 
 def gradline(x, k):
     blocks = GRADS[-1] * int(x)
@@ -269,6 +278,13 @@ class TkinterFilesHandler:
                     self.entrys_elems_collection[j]['state'] = oldstate
             # TODO add soft replace (replace changed rows only)
     
+    def set_incorrect(self, correct_flags):
+        """paint incorrect modifiers in pink"""
+        for flag, (j, k) in zip(correct_flags, self.formatters_content):
+            # disabledbackground
+            self.entrys_elems_collection[j]['bg'] = self.pal['entrys'][1-flag]
+            self.entrys_elems_collection[j]['disabledbackground'] = self.pal['entrys'][1+flag]
+
     def update(self):
         self.fh.mainloop_cycle()
         # update lists
@@ -304,7 +320,8 @@ class TkinterFilesHandler:
                 # print(key, old, new, sep='\n', end='\n\n' + '-'*30 + '\n')
             self.dumps[key] = copy.deepcopy(new)
         # ------------ update statistics:
-        self.stat_elems_collection['stats']['last_upd']['text'] = time.strftime('%T')
+        grads2 = GRADS[1:] + GRADS[1:][::-1]
+        self.stat_elems_collection['stats']['last_upd']['text'] = time.strftime('%T') + ' ' + grads2[int(time.time() % 1 * (len(grads2)))]
         newtime = time.time()
         self.stat_elems_collection['stats']['fps']['text'] = round(1 / (newtime - self.statistics['lasttime']), 1)
         self.statistics['lasttime'] = newtime
