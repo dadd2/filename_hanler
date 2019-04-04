@@ -41,7 +41,7 @@ base_settings = {
     "source-folder": "/Users/dadd2/Documents/unreal_life/newEOS_base/src",
     "destination-folder": "/Users/dadd2/Documents/unreal_life/newEOS_base/dest",
     "history-file": None, # "history.txt",
-    "file-excluding-patterns": [],
+    "file-excluding-patterns": [r"^\.DS_Store$"],
     "name-pattern": [
         'img-',
         ['int', 5, 1, True, False, ['q', 'a']],
@@ -445,19 +445,4 @@ if __name__ == '__main__':
         pprint.pprint(fh.files_ready)
         print('-'*30)
         time.sleep(1)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

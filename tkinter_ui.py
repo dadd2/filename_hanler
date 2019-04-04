@@ -5,8 +5,9 @@ from tkinter import *
 from tkinter import messagebox
 import time
 import copy
+import time
 
-
+oldsize = [0]
 # ui elements:
 # counter of bad files (an other statistics...)
 # history
@@ -15,7 +16,16 @@ import copy
 # todo:
 # embed russification possibility
 # сделать какое-нибудь мигание при обновлении данных
+GRADS = [' '] + [chr(i) for i in range(9615, 9607, -1)]
 
+
+def gradline(x, k):
+    blocks = GRADS[-1] * int(x)
+    # print(blocks+'-')
+    if x > int(x):
+        blocks += GRADS[int(x % 1 * (len(GRADS)))]
+    return blocks + ' ' * (k - len(blocks))
+# print('-' + gradline(4,4) + '-')
 
 class ListDict(list):
     def __init__(self):
@@ -105,7 +115,7 @@ class TkinterFilesHandler:
             la.update(place_arg)
             sa.update(place_arg)
 
-            self.lists_items['lists'].append(Listbox(self.lists_frame))
+            self.lists_items['lists'].append(Listbox(self.lists_frame, font='Menlo 11'))
             self.lists_items['scrolls'].append(Scrollbar(
                 self.lists_frame,
                 orient=VERTICAL,
@@ -114,8 +124,10 @@ class TkinterFilesHandler:
             self.lists_items['lists'][-1]['yscrollcommand'] = self.lists_items['scrolls'][-1].set
             self.lists_items['lists'][-1].place(la)
             self.lists_items['scrolls'][-1].place(sa)
-        for line in ['todo:', '- messages', '- color indicate unfocus', '- work with pause condition']:
+        for i, line in enumerate(['todo:', '- messages', '- color indicate unfocus', '- work with pause condition',
+                                  '- make soft insertion', '-use backgrounds']):
             self.lists_items['lists'][0].insert(END, line)
+        self.lists_items['lists'][0].itemconfig(i, bg='yellow', selectbackground='red')
         
         def get_command(text):
             return lambda: self.button_elem_callback(text + 'bt')
@@ -214,7 +226,8 @@ class TkinterFilesHandler:
         
     def ask_alter(self, msg, default=1):
         """обёртка для messagebox """
-        # todo ПРОТЕСТИРОВАТЬ НАЖАТИЕ НА КРЕСТИК И None
+        # todo: ПРОТЕСТИРОВАТЬ НАЖАТИЕ НА КРЕСТИК И None
+        # fixme: is called also when src directory should be empty
         return messagebox.askyesno(title='question', message=msg + '?')
 
     def lock_switch(self, state='normal'):
@@ -267,17 +280,27 @@ class TkinterFilesHandler:
         #     for (j, i), flag in zip(self.formatters_content, self.fh.validate(self.get_modifiers())):
         #         self.entrys_elems_collection[j]['bg'] = self.pal['entrys'][not flag]
         # ------------ update lists:
+        t = time.time()
         for i, key in enumerate(('files_cooking', 'files_ready', 'files_history')):
             old, new = self.dumps[key], getattr(self.fh, key)
-            if old != new:
-                if i == 2:
+            if i == 2:
+                if new != old:
                     for finfo in new[len(old):]:
                         self.lists_items['lists'][i].insert(0, '{fname-new} / {fname}'.format(**finfo))
 
-                else:
-                    self.lists_items['lists'][i].delete(0, END)
-                    for finfo in new:
-                        self.lists_items['lists'][i].insert(END, '{stage} {fname}'.format(**finfo))
+            elif new != old:
+                self.lists_items['lists'][i].delete(0, END)
+                for finfo in new:
+                    k = 5
+                    if finfo['stage'] == 0:
+                        stg = gradline(finfo['size'] / self.fh.settings['size-cooked'] * k, k)
+                    elif finfo['stage'] == 1:
+                        stg = gradline((t - finfo['mtime']) / self.fh.settings['cooking-time'] * k, k)
+                    else:
+                        stg = gradline(k, k)
+                    self.lists_items['lists'][i].insert(END, '{stage} [{stg}] {fname}'.format(stg=stg, **finfo))
+            elif i == 0 and 1 in (finfo['stage'] for finfo in new):
+                pass
                 # print(key, old, new, sep='\n', end='\n\n' + '-'*30 + '\n')
             self.dumps[key] = copy.deepcopy(new)
         # ------------ update statistics:
