@@ -22,6 +22,7 @@ import json
 # - переделать описание инта по шаблону: минимальное значение, максимальное значение
 # - написать логирование; вывести опцию в settings
 # - нарисовать в какой-нить проге модель взаимодействия всей этой гажи
+# - развернуть стрелки от VC к M
 
 # TODO:
 # - error tracking
@@ -48,9 +49,11 @@ import json
 # name-pattern element:
 # first param: class
 # for int:
-# [class, ndigits, default, write_leading_zeros, is_autoincrement, ]
+# [class, ndigits, default, write_leading_zeros, is_autoincrement, hotkeys]
 # for str:
 # [class, entry_width, default]
+# for var:
+# [class, variants, default, needs_reset]
 # for ext:
 # [class]
 
@@ -58,20 +61,17 @@ base_settings = {
     "source-folder": "/Users/dadd2/Documents/unreal_life/newEOS_base/src",
     "destination-folder": "/Users/dadd2/Documents/unreal_life/newEOS_base/dest",
     "history-file": None, # "history.txt",
-    "file-excluding-patterns": [r"^\.DS_Store$"],
+    "file-excluding-patterns": [r"^\.DS_Store$", r'\.tiff-'],
     "name-pattern": [
-        'img-',
-        ['int', 5, 1, True, False, ['q', 'a']],
+        '1-1-',
+        ['int', 4, 1, False, False, ['qй', 'aф']],
         '-',
-        ['int', 3, 1, True, False, ['w', 's']],
-        '-',
-        ['int', 1, 1, True, False, ['e', 'd']],
-        '=',
-        ['int', 2, 1, True, True, ['r', 'f']],
+        ['int', 2, 1, False, False, ['wц', 'sы']],
+        # ['var', ['', 'об'], True, ['eу', 'dв']],
         ['ext']
     ],
     "size-cooked": 50,
-    "cooking-time": 3,
+    "cooking-time": 2.5,
     "reloading-delay": 10,
     "seconds-for-overload": 5,
     "update-peiod-ms": 200
