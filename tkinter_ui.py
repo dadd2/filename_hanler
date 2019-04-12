@@ -89,6 +89,8 @@ class ListDict(list):
 
 class TkinterFilesHandler:
     """главный класс в проекте"""
+
+    # var supply: 0
     def __init__(self, data_location):
         """первая стадия инициализации, до создания FileHandler (остальное -- в _init_2 при вызове mainloop)
         data_location один раз передаётся в self.fh; рефакторить при работе с конфигами
@@ -117,6 +119,7 @@ class TkinterFilesHandler:
         }
 
         self.pal = {
+            # TODO: divide into "entrys-int" / "entrys-var" etc
             "entrys": ['white', 'pink', '#9f9']
         }
         self.dumps = {
@@ -129,12 +132,12 @@ class TkinterFilesHandler:
         self.root = Tk()
 
         self.root.geometry('{w}x{h}+{x}+{y}'.format(w=300, h=480, x=10, y=10))
-        self.root.minsize(height=300, width=400)
+        self.root.minsize(height=300, width=300)
         self.root.resizable(True, True)
         self.root.title('files handler by dadd2')
 
         self.main_frame = Frame(self.root)
-        r=10
+        r=2
         self.main_frame.place(x=r, y=r, relwidth=1, relheight=1, width=-2*r, height=-2*r)
 
         self.entrys_frame = Frame(self.main_frame)
@@ -202,13 +205,15 @@ class TkinterFilesHandler:
                 )
         for elem in self.stat_elems_collection['stats']:
             elem.pack(side=LEFT)
-    
+
+    # var supply: 0
     def mainloop(self):
         """Планирует вызов к self._init_2 и вызывает self.root.mainloop
         TODO: вспомнить, зачем вызов _init_2 завёрнут в after"""
         self.root.after(200, self._init_2)
         self.root.mainloop()
 
+    # var supply: +/-
     def _init_2(self):
         """часть инициализации, которая объявляет FileHandler и использует данные из неё; здесь достраивается интерфейс
 
@@ -216,6 +221,7 @@ class TkinterFilesHandler:
         - инициализирует self.fh -- бэкендовый объект из files_handler.py
         - в соответствии с прочитанными настройками создаёт строку с полями имени файла
         - биндит keypress/keyrelease на self.keys_callback
+        - биндит focusin/focusout на self.focus_change_callback
         - вызывает self.fh.correcf; self.fh.ui_setup
         - вызывает self.update"""
         self.fh = files_handler.FilesHandler(self.data_location, self)
@@ -244,6 +250,25 @@ class TkinterFilesHandler:
                         w=15, h=30,
                         letters=elem[5],
                         callback=get_callback(len(self.entrys_elems_collection)-1)))
+                elif elem[0] == 'var':
+                    # fixme: rework GUI to support any class of modifiers
+                    def get_callback(i):
+                        return lambda kind, direction, source: self.arrows_callback(i, kind, source)
+                    self.entrys_elems_collection.append(Entry(
+                        self.entrys_frame,
+                        width=max(map(len, elem[1])),
+                        state='normal',
+                        disabledbackground=self.pal['entrys'][2],
+                        disabledforeground='black'
+                    ))
+                    self.formatters_content.append([len(self.entrys_elems_collection)-1, i])
+
+                    self.entrys_elems_collection.append(ButtonCanvas(
+                        self.entrys_frame,
+                        w=15, h=30,
+                        letters=elem[4],
+                        callback=get_callback(len(self.entrys_elems_collection)-1)))
+
                 elif elem[0] == 'ext':
                     self.entrys_elems_collection.append(Label(self.entrys_frame, text='.[ext]'))
                 else:
@@ -252,12 +277,19 @@ class TkinterFilesHandler:
             entry_elem.pack(side=LEFT)
         self.root.bind_all('<KeyPress>', lambda event: self.keys_callback(event, 'Press'))
         self.root.bind_all('<KeyRelease>', lambda event: self.keys_callback(event, 'Release'))
+        self.root.bind('<FocusIn>', lambda event: self.focus_change_callback(1))
+        self.root.bind('<FocusOut>', lambda event: self.focus_change_callback(0))
         self.fh.correct()
         print('corrected')
         self.fh.ui_setup()
         self.init_complete = False
         self.update()
 
+    def focus_change_callback(self, newstate):
+        assert newstate in (0, 1)
+        # print('fcc', newstate, time.time())
+        self.root['bg'] = ['white', 'blue'][newstate]
+    # var supply: 0
     def button_elem_callback(self, btname):
         '''обработка вызова кнопок correct, reset, lock/unlock, pause/resume
         TODO:
@@ -272,20 +304,23 @@ class TkinterFilesHandler:
             self.fh.correct()
         elif btname == 'resetbt':
             self.fh.reset()
-    
+
+    # var supply: 0
     def arrows_callback(self, i_, kind, source):
         """вызывается из ButtonCanvas (то есть из части окна, где строка с modifiers)"""
         # print(i_, self.formatters_content)
         i = [i for i, (j, k) in enumerate(self.formatters_content) if j == i_][0]
         # print(i)
         self.fh.modifier_increm(i, [1, -1][('up', 'down').index(kind)], save_others=source=='click')
-    
+
+    # var supply: 0
     def keys_callback(self, event, direction):
         """вызывается из self.root.bind_all('<KeyPress>', ...) и т. п.
         передаёт этот вызов на ButtonCanvas'ы"""
         for j, k in self.formatters_content:
             self.entrys_elems_collection[j+1].key_callback(event, direction)
-        
+
+    # var supply: 0
     def ask_alter(self, msg, default=1):
         """обёртка для messagebox.askyesno
         
@@ -294,6 +329,7 @@ class TkinterFilesHandler:
         """
         return messagebox.askyesno(title='question', message=msg + '?')
 
+    # var supply: 0
     def lock_switch(self, state='normal'):
         """переключает состояния и тексты кнопок из второй строки в соответствии с требованием
 
@@ -310,6 +346,7 @@ class TkinterFilesHandler:
         self.button_elems_coolection['applybt'].config(state=state)
         self.button_elems_coolection['lockbt'].config(text=('lock', 'unlock')[i])
 
+    # var supply: 0
     def pause_switch(self, direction='pause'):
         """переключает состояния и тексты кнопок из второй строки в соответствии с требованием
 
@@ -324,10 +361,12 @@ class TkinterFilesHandler:
         self.button_elems_coolection['lockbt'].config(state=states[i])
         self.button_elems_coolection['applybt'].config(state=states[i])
 
+    # var supply: 0
     def get_modifiers(self):
         """вызывается из FileHandler, возвращает массив содержимого entrys"""
         return [self.entrys_elems_collection[j].get() for j, i in self.formatters_content]
-    
+
+    # var supply: 0
     def set_modifiers(self, modifiers):
         """вызывается из FileHandler; обновляет modifiers в GUI
 
@@ -337,7 +376,9 @@ class TkinterFilesHandler:
             - вставляем свой текст"""
         assert len(modifiers) == len(self.formatters_content)
         for new, (j, i), old in zip(modifiers, self.formatters_content, self.get_modifiers()):
+            # print('set_modifiers', new, i, j, old)
             if old != new:
+                # print('set_modifiers: enter if')
                 oldstate = self.entrys_elems_collection[j]['state']
                 if oldstate != 'normal':
                     self.entrys_elems_collection[j]['state'] = 'normal'
@@ -346,7 +387,8 @@ class TkinterFilesHandler:
                 if oldstate != 'normal':
                     self.entrys_elems_collection[j]['state'] = oldstate
             # TODO add soft replace (replace changed rows only)
-    
+
+    # var supply: 0
     def set_incorrect(self, correct_flags):
         """paint incorrect modifiers in pink (both enabled and disabled background)"""
         for flag, (j, k) in zip(correct_flags, self.formatters_content):
@@ -354,6 +396,7 @@ class TkinterFilesHandler:
             self.entrys_elems_collection[j]['bg'] = self.pal['entrys'][1-flag]
             self.entrys_elems_collection[j]['disabledbackground'] = self.pal['entrys'][1+flag]
 
+    # var supply 0
     def update(self):
         """вызывается с 10 FPS и держит всё в рабочем состоянии
         План работы:
@@ -385,29 +428,30 @@ class TkinterFilesHandler:
                 if new != old:
                     for finfo in new[len(old):]:
                         self.lists_items['lists'][i].insert(0, '{fname-new} / {fname}'.format(**finfo))
-            k = 5
-            for j, finfo in enumerate(new):
-                if j >= len(old) or finfo != old[j] or finfo['stage'] == 1:
-                    stg_size = gradline(finfo['size'] / self.fh.settings['size-cooked'] * k, k)
-                    if finfo['stage'] == 0:
-                        stg_time = gradline(0, k)
-                        bg_color = hexcolor(gradient(*COOKING_GRADS, finfo['size'] / self.fh.settings['size-cooked']))
-                    elif finfo['stage'] == 1:
-                        stg_time = gradline((t - finfo['mtime']) / self.fh.settings['cooking-time'] * k, k)
-                        bg_color = hexcolor(gradient(*TIMING_GRADS, (t - finfo['mtime']) / self.fh.settings['cooking-time']))
-                    else:
-                        stg_time = gradline(k, k)
-                        bg_color = hexcolor(gradient(*TIMING_GRADS, 1))
-                    if j < len(old):
-                        self.lists_items['lists'][i].delete(j)
-                    self.lists_items['lists'][i].insert(END, '{stage}{stg_size}|{stg_time}| {fname}'.format(**finfo, **locals()))
-                    self.lists_items['lists'][i].itemconfig(j, bg=bg_color, selectbackground=bg_color,
-                                                            selectforeground='red')
-            if len(new) < len(old):
-                self.lists_items['lists'][i].delete(len(new), END)
+            else:
+                k = 5
+                for j, finfo in enumerate(new):
+                    if j >= len(old) or finfo != old[j] or finfo['stage'] == 1:
+                        stg_size = gradline(finfo['size'] / self.fh.settings['size-cooked'] * k, k)
+                        if finfo['stage'] == 0:
+                            stg_time = gradline(0, k)
+                            bg_color = hexcolor(gradient(*COOKING_GRADS, finfo['size'] / self.fh.settings['size-cooked']))
+                        elif finfo['stage'] == 1:
+                            stg_time = gradline((t - finfo['mtime']) / self.fh.settings['cooking-time'] * k, k)
+                            bg_color = hexcolor(gradient(*TIMING_GRADS, (t - finfo['mtime']) / self.fh.settings['cooking-time']))
+                        else:
+                            stg_time = gradline(k, k)
+                            bg_color = hexcolor(gradient(*TIMING_GRADS, 1))
+                        if j < len(old):
+                            self.lists_items['lists'][i].delete(j)
+                        self.lists_items['lists'][i].insert(END, '{stage}{stg_size}|{stg_time}| {fname}'.format(**finfo, **locals()))
+                        self.lists_items['lists'][i].itemconfig(j, bg=bg_color, selectbackground=bg_color,
+                                                                selectforeground='red')
+                if len(new) < len(old):
+                    self.lists_items['lists'][i].delete(len(new), END)
 
-            elif i == 0 and 1 in (finfo['stage'] for finfo in new):
-                pass
+            # elif i == 0 and 1 in (finfo['stage'] for finfo in new):
+                # pass
                 # print(key, old, new, sep='\n', end='\n\n' + '-'*30 + '\n')
             self.dumps[key] = copy.deepcopy(new)
         # ------------ update statistics:

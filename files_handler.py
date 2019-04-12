@@ -53,7 +53,7 @@ import json
 # for str:
 # [class, entry_width, default]
 # for var:
-# [class, variants, default, needs_reset]
+# [class, variants, default, needs_reset, hotkeys]
 # for ext:
 # [class]
 
@@ -66,11 +66,11 @@ base_settings = {
         '1-1-',
         ['int', 4, 1, False, False, ['qй', 'aф']],
         '-',
-        ['int', 2, 1, False, False, ['wц', 'sы']],
-        # ['var', ['', 'об'], True, ['eу', 'dв']],
+        ['int', 2, 1, False, True, ['wц', 'sы']],
+        ['var', ['', 'об'], 0, True, ['eу', 'dв']],
         ['ext']
     ],
-    "size-cooked": 50,
+    "size-cooked": 50000,
     "cooking-time": 2.5,
     "reloading-delay": 10,
     "seconds-for-overload": 5,
@@ -146,6 +146,8 @@ class ConsoleUI:
 
 class FilesHandler:
     """главный класс, который лежит под капотом у tkinterui, содержит всю логику отслеживания и управления файлами"""
+
+    # var supply: 0
     def __init__(self, settings_location, ui):
         """ну, понятно
 
@@ -166,14 +168,15 @@ class FilesHandler:
         self.paused = False
         self.oldfiles = False
         self.last_update_time = {'cooking': 0, 'ready': 0, 'history': 0}
-
-        if os.listdir(self.settings['source-folder']):
+        finfos = list(self.get_directory_content(is_first=True))
+        if finfos:
             if ui.ask_alter('there are some files in the directory. should we clean the directory before work'):
-                for finfo in self.get_directory_content(is_first=True):
+                for finfo in finfos:
                     os.remove(os.path.join(self.settings['source-folder'], finfo['fname']))
             else:
                 self.oldfiles = True
-    
+
+    # var supply: 0
     def get_directory_content(self, is_first):
         """возвращает массив из fileinfos
         (каждое fileinfo -- словарь из ino, size, stage, fname, addtime, ...)
@@ -197,7 +200,8 @@ class FilesHandler:
                     result['stage'] = 1
                     result['mtime'] = result['addtime']
                 yield result
-    
+
+    # var supply: 0
     def mainloop_cycle(self):
         """самая полезная функция во всём классе
 
@@ -315,10 +319,11 @@ class FilesHandler:
 
         # - distribute flags updates between UI and FH (main point is who cares about stopping)
 
+    # var supply: +/0
     def validate(self, modifiers):
         """проверяет последовательность кусков имени файла на вшивость
-        при типе паттерна str кидает NotImplementedError"""
-        patterns = [x for x in self.settings['name-pattern'] if isinstance(x, list) and x[0] in ['int', 'str']]
+        при левом типе паттерна кидает NotImplementedError"""
+        patterns = [x for x in self.settings['name-pattern'] if isinstance(x, list) and x[0] not in ['ext']]
         assert len(modifiers) == len(patterns), (len(modifiers), len(patterns))
         result = [True for m in modifiers]
 
@@ -335,16 +340,19 @@ class FilesHandler:
                     if len(m) > p[1]:
                         # print('i', i, 'len > patlen')
                         result[i] = False
-            elif p[0] == 'str':
+            elif p[0] == 'var':
+                result[i] = m in p[1]
+            else:
                 raise NotImplementedError()
         return result
-    
+
+    # var supply: +/0
     def correct(self):
         """меняет вшивые куски имени файла на подходящие невшивые
-        при типе паттерна str кидает NotImplementedError"""
+        при левом типе паттерна кидает NotImplementedError"""
 
         modifiers = self.ui.get_modifiers()
-        patterns = [x for x in self.settings['name-pattern'] if isinstance(x, list) and x[0] in ['int', 'str']]
+        patterns = [x for x in self.settings['name-pattern'] if isinstance(x, list) and x[0] not in ['ext']]
         assert len(modifiers) == len(patterns)
 
         for i, p in enumerate(patterns):
@@ -358,11 +366,16 @@ class FilesHandler:
                     modifiers[i] = modifiers[i][:p[1]]
                 if len(p) > 2 and p[3] and len(modifiers[i]) < p[1]:
                     modifiers[i] = modifiers[i].zfill(p[1])
-            elif p[0] == 'str':
+            elif p[0] == 'var':
+                # print('correct modifier:', p[2])
+                if modifiers[i] not in p[1]:
+                    modifiers[i] = p[1][p[2]]
+            else:
                 raise NotImplementedError()
         self.ui.set_modifiers(modifiers)
         self.ui.set_incorrect(self.validate(modifiers))
-    
+
+    # var supply: 0
     def modifiers_apply(self, modifiers, ext):
         """возвращает готовое имя файла"""
         result = ''
@@ -377,47 +390,68 @@ class FilesHandler:
                     result += modifiers[i]
                     i += 1
         return result
-    
+
+    # var supply: +/-
     def reset(self):
-        '''сбрасывает все entrys до defaults'''
-        self.ui.set_modifiers(['' for x in self.settings['name-pattern'] if isinstance(x, list) and x[0] in ['int', 'str']])
+        """сбрасывает все entrys до defaults
+        FIXME: будет вести себя плохо, если в var будет '' не на default"""
+        self.ui.set_modifiers(['' for x in self.settings['name-pattern'] if isinstance(x, list) and x[0] not in ['ext']])
         self.correct()
 
+    # var supply: +/-
     def modifier_increm(self, index, count, save_others=False):
         """изменяет кусок имени файла с обработками всякий ошибок
         побочный эффект: обращение к UI
         в конце вызывает correct на всякий случай"""
         assert count in (1, -1)
-        patterns = [x for x in self.settings['name-pattern'] if isinstance(x, list) and x[0] in ['int', 'str']]
+        patterns = [x for x in self.settings['name-pattern'] if isinstance(x, list) and x[0] not in ['ext']]
         intpatterns = [i for i, x in enumerate(patterns) if x[0] == 'int']
+        varpatterns = [i for i, x in enumerate(patterns) if x[0] == 'var']
 
         modifiers = self.ui.get_modifiers()
         for i in intpatterns:
             modifiers[i] = int(modifiers[i])
-        # print('before modifiers', modifiers)
+        # print('modifier_increm ', index)
+        if patterns[index][0] == 'int':
+            newval = modifiers[index] + count
+            if newval >= 0 and len(str(newval)) <= patterns[index][1]:
+                modifiers[index] += count
 
-        newval = modifiers[index] + count
-        if newval >= 0 and len(str(newval)) <= patterns[index][1]:
-            modifiers[index] += count
-
-            if not save_others:
-                for i in range(intpatterns.index(index)+1, len(intpatterns)):
-                    modifiers[intpatterns[i]] = patterns[intpatterns[i]][2]
-            self.ui.set_modifiers([str(x) for x in modifiers])
-            self.correct()
+                if not save_others:
+                    for i in range(intpatterns.index(index)+1, len(intpatterns)):
+                        modifiers[intpatterns[i]] = patterns[intpatterns[i]][2]
+                    for i in varpatterns:
+                        if patterns[i][3]:
+                            modifiers[i] = patterns[i][1][patterns[i][2]]
+        elif patterns[index][0] == 'var':
+            vars = patterns[index][1]
+            # print('vars:', vars)
+            modifiers[index] = vars[(vars.index(modifiers[index]) + count) % len(vars)]
+            # print('result:', modifiers[index])
+        else:
+            raise NotImplementedError()
+        self.ui.set_modifiers([str(x) for x in modifiers])
+        self.correct()
         # print('incremed modifiers', modifiers)
 
+    # var supply: 0
     def ui_setup(self):
         '''вызывается в начале, когда не понятно, что вообще происходит
         (вызывается один раз в конце TkinterFilesHandler._init_2)
         Пока что только синхронизирует статус pause между собой и UI
         todo: выяснить и описать, какой баг перекрывает '''
         self.ui.pause_switch(('resume', 'pause')[self.paused])
-    
+
+    # var supply: 0/0
     def autoincrement(self):
-        '''not implemented; должен выискивать флаг autoincrement и прибавлять конкретный модифиер'''
-        raise NotImplementedError('да напешы ти уже... =)')
-    
+        """выискивает флаг autoincrement и вызывает modifier_increm где надо"""
+        patterns = [x for x in self.settings['name-pattern'] if isinstance(x, list) and x[0] not in ['ext']]
+        intpatterns = [i for i, p in enumerate(patterns) if p[0]=='int' and p[4]]
+        # print('autoincrement', ii)
+        if intpatterns:
+            self.modifier_increm(intpatterns[0], 1)
+
+    # var supply: 0
     def file_move(self):
         """Вторая важная функция после mainloop_cycle. Надо выяснить и записать, как она работает.
         Работа ф-ции не завивит от состояния флага paused...
@@ -444,7 +478,8 @@ class FilesHandler:
         - выпилить дурацкое логирование принтами"""
 
         modifiers = copy.deepcopy(self.ui.get_modifiers())
-        self.modifier_increm(len(modifiers)-1, 1)
+        # self.modifier_increm(len(modifiers)-1, 1)
+        self.autoincrement()
         if not all(self.validate(modifiers)):
             raise ValueError('some modifiers are invalid; write proper logging here')
         if self.files_ready:
@@ -463,24 +498,29 @@ class FilesHandler:
 
             self.last_update_time['ready'] = time.time()
             self.last_update_time['history'] = time.time()
-        print('FH file move: EOfunction')  # это вообще чё?
 
+        print('FH file move: end of function')  # это вообще чё?
+
+    # var supply: 0
     def history_write(self, s):
         """функция, которая должна с использованием soft_open логировать перемещённые файлы
         TODO: придумать, как при запуске из неё заполнять """
         print('file done:', s)
         if self.settings['history-file'] is not None:
             raise NotImplementedError('write this f; это логирование не работаеть')
-    
+
+    # var supply: 0
     def pause(self):
         """просто self.paused = True, ну ещё обращение к UI с тем же..."""
         self.paused = True
         self.ui.pause_switch('pause')
-    
+
+    # var supply: 0
     def resume(self):
-        """if modifiers are valid -- moves file; if no files left -- resumes
+        """if modifiers are invalid -- calls self.ui.set_incorrect;
+        if modifiers are valid -- moves file; if no files left -- resumes
         calls ui.resume if ok
-        if modifiers are invalid -- callse ui.set_incorrect
+
 
         TODO: сделать человекопонятные if-else вместо raise/return"""
         if not self.paused:
@@ -498,7 +538,8 @@ class FilesHandler:
             # ----------------------- successfull resume
             self.paused = False
             self.ui.pause_switch('resume')
-    
+
+    # var supply: 0
     def settings_change(self):
         """not implemented; функция, которая должна решать, какие изменения можна без перезагрузки; валиднуть новые settings и проч"""
         raise NotImplementedError()
