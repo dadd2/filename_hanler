@@ -57,26 +57,32 @@ import json
 # for ext:
 # [class]
 
-COSTYL_PATH=True
+CREATE_SUBFOLDERS=True
+SCAN_OBOROTS_COUNT=True
 base_settings = {
-    "source-folder": "/Users/dadd2/Documents/unreal_life/newEOS_base/srcb",
-    "destination-folder": "/Users/dadd2/Documents/unreal_life/newEOS_base/dest",
+##    "source-folder": r"C:\Users\guest\Pictures\Фонд 1\сортировочная",
+##    "destination-folder": r"C:\Users\guest\Pictures\Фонд 1\NEW",
+    "source-folder":      r"C:\Users\guest\Desktop\работа Ильи Алексеева\srcb",
+    "destination-folder": r"C:\Users\guest\Desktop\работа Ильи Алексеева\dest",
     "history-file": None,  # "history.txt",
     "file-excluding-patterns": [r"^\.DS_Store$", r'\.tiff-'],
     "name-pattern": [
-        '1-1-',
-        ['int', 4, 1, False, False, ['qй', 'aф']],
+        ['int', 1, 4, False, False, ['t', 'g']],
         '-',
-        ['int', 2, 1, False, True, ['wц', 'sы']],
+        ['int', 2, 31, False, False, ['y', 'h']],
+        '-',
+        ['int', 4, 1, False, False, ['q', 'a']],
+        '-',
+        ['int', 3, 1, False, True, ['w', 's']],
         ['var', ['', 'а', 'б', 'в', 'г', 'д', 'е', 'ж', 'з', 'и', 'к', 'л', 'м', 'н', 'о', 'п', 'р', 'с', 'т', 'у',
-                 'ф', 'х', 'ц', 'ч', 'ш', 'ы', 'э', 'ю', 'я'], 0, True, ['eу', 'dв']],
-        ['var', ['', ' об', ' доп'], 0, True, ['rк', 'fа']],
+                 'ф', 'х', 'ц', 'ч', 'ш', 'ы', 'э', 'ю', 'я'], 0, True, ['e', 'd']],
+        ['var', ['', ' об', ' доп'], 0, True, ['r', 'f']],
         ['ext']
     ],
     "size-cooked": 50,
-    "cooking-time": 2.5,
+    "cooking-time": 4,
     "reloading-delay": 10,
-    "seconds-for-overload": 5,
+    "seconds-for-overload": .5,
     "update-peiod-ms": 200
 }
 
@@ -103,7 +109,15 @@ def fmove(src, dst, chunk=1024*512):
                     break
                 dstfile.write(r)
                 # print('srcfile chunk')
-    os.remove(src)
+    for i in range(4, 0, -1):
+        try:
+            os.remove(src)
+            break
+        except:
+            raise
+            if i == 0:
+                raise
+            time.sleep(.2)
 
 
 def soft_open(path, mode='r', ok_callback=lambda f:f.read(), err_callback=lambda e: ''):
@@ -390,8 +404,8 @@ class FilesHandler:
         """возвращает готовое имя файла
         TODO: вынести ext.lower в файл конфигурации флагом"""
         result = ''
-        if COSTYL_PATH:
-            result += modifiers[0] + '/'
+        if CREATE_SUBFOLDERS:
+            result += modifiers[2] + '/'
         i = 0
         for p in self.settings['name-pattern']:
             if isinstance(p, str):
@@ -412,10 +426,11 @@ class FilesHandler:
         self.correct()
 
     # var supply: +/-
-    def modifier_increm(self, index, count, save_others=False):
+    def modifier_increm(self, index, count, save_others=False, source='user'):
         """изменяет кусок имени файла с обработками всякий ошибок
         побочный эффект: обращение к UI
-        в конце вызывает correct на всякий случай"""
+        в конце вызывает correct на всякий случай
+        source нужен для того, чтобы работал SCAN_OBOROTS_COUNT (для обороток); бывает 'user'; 'auto'"""
         assert count in (1, -1)
         patterns = [x for x in self.settings['name-pattern'] if isinstance(x, list) and x[0] not in ['ext']]
         intpatterns = [i for i, x in enumerate(patterns) if x[0] == 'int']
@@ -425,38 +440,46 @@ class FilesHandler:
         for i in intpatterns:
             modifiers[i] = int(modifiers[i])
         # print('modifier_increm ', index)
-        # ----------------- change by index
-        changes_flag = False
-        if patterns[index][0] == 'int':
-            newval = modifiers[index] + count
-            if newval >= 0 and len(str(newval)) <= patterns[index][1]:
-                modifiers[index] += count
-                changes_flag = True
-
-        elif patterns[index][0] == 'var':
-            vars = patterns[index][1]
-            # print('vars:', vars)
-            modifiers[index] = vars[(vars.index(modifiers[index]) + count) % len(vars)]
-            changes_flag = True
-            # print('result:', modifiers[index])
+        if source == 'auto' and SCAN_OBOROTS_COUNT:
+            # костыль для обороток TODO сделать кнопку и норм обработку
+            if modifiers[5] == ' об':
+                modifiers[5] = ''
+                modifiers[3] += 1
+            else:
+                modifiers[5] = ' об'
         else:
-            raise NotImplementedError()
-        # ----------------- change others
-        if not save_others and changes_flag:
-            for i, p in enumerate(patterns):
-                if i > index:
-                    if p[0] == 'int':
-                        modifiers[i] = p[2]
-                    elif p[0] == 'var':
-                        modifiers[i] = p[1][p[2]]
-                    else:
-                        raise NotImplementedError()
-            if False:
-                for i in range(intpatterns.index(index) + 1, len(intpatterns)):
-                    modifiers[intpatterns[i]] = patterns[intpatterns[i]][2]
-                for i in varpatterns:
+            # ----------------- change by index
+            changes_flag = False
+            if patterns[index][0] == 'int':
+                newval = modifiers[index] + count
+                if newval >= 0 and len(str(newval)) <= patterns[index][1]:
+                    modifiers[index] += count
+                    changes_flag = True
+
+            elif patterns[index][0] == 'var':
+                vars = patterns[index][1]
+                # print('vars:', vars)
+                modifiers[index] = vars[(vars.index(modifiers[index]) + count) % len(vars)]
+                changes_flag = True
+                # print('result:', modifiers[index])
+            else:
+                raise NotImplementedError()
+            # ----------------- change others
+            if not save_others and changes_flag:
+                for i, p in enumerate(patterns):
                     if i > index:
-                        modifiers[i] = patterns[i][1][patterns[i][2]]
+                        if p[0] == 'int':
+                            modifiers[i] = p[2]
+                        elif p[0] == 'var':
+                            modifiers[i] = p[1][p[2]]
+                        else:
+                            raise NotImplementedError()
+                if False:
+                    for i in range(intpatterns.index(index) + 1, len(intpatterns)):
+                        modifiers[intpatterns[i]] = patterns[intpatterns[i]][2]
+                    for i in varpatterns:
+                        if i > index:
+                            modifiers[i] = patterns[i][1][patterns[i][2]]
         self.ui.set_modifiers([str(x) for x in modifiers])
         self.correct()
         # print('incremed modifiers', modifiers)
@@ -476,7 +499,7 @@ class FilesHandler:
         intpatterns = [i for i, p in enumerate(patterns) if p[0]=='int' and p[4]]
         # print('autoincrement', ii)
         if intpatterns:
-            self.modifier_increm(intpatterns[0], 1)
+            self.modifier_increm(intpatterns[0], 1, source='auto')
 
     # var supply: 0
     def file_move(self):

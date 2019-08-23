@@ -42,7 +42,7 @@ COOKING_GRADS = [[100, 100, 255], [255, 255, 255]]
 TIMING_GRADS = [[255, 255, 255], [150, 255, 150]]
 
 
-def gradline(x, k):
+def gradline_old(x, k):
     if x > k:
         x = k
     blocks = GRADS[-1] * int(x)
@@ -50,7 +50,11 @@ def gradline(x, k):
     if x > int(x):
         blocks += GRADS[int(x % 1 * (len(GRADS)))]
     return blocks + ' ' * (k - len(blocks))
-
+def gradline(x, k):
+    p = int(x/k * 100)
+    if p > 100:
+        p = 100
+    return '{:>4}%'.format(p)
 
 def hexcolor(rgb):
     return '#' + ''.join(HEX_ALPH[int(i)] for i in rgb)
@@ -142,7 +146,7 @@ class TkinterFilesHandler:
         self.root.title('files handler by dadd2')
 
         self.main_frame = Frame(self.root)
-        r=2
+        r=3
         self.main_frame.place(x=r, y=r, relwidth=1, relheight=1, width=-2*r, height=-2*r)
 
         self.entrys_frame = Frame(self.main_frame)
@@ -168,7 +172,7 @@ class TkinterFilesHandler:
             la.update(place_arg)
             sa.update(place_arg)
 
-            self.lists_items['lists'].append(Listbox(self.lists_frame, font='Menlo 11'))
+            self.lists_items['lists'].append(Listbox(self.lists_frame, font='Menlo 9'))
             self.lists_items['scrolls'].append(Scrollbar(
                 self.lists_frame,
                 orient=VERTICAL,
@@ -234,6 +238,7 @@ class TkinterFilesHandler:
             os.path.split(self.fh.settings['source-folder'])[1],
             os.path.split(self.fh.settings['destination-folder'])[1]
         ))
+
         for i, elem in enumerate(self.fh.settings['name-pattern']):
             if isinstance(elem, str):
                 self.entrys_elems_collection.append(Label(self.entrys_frame, text=elem))
@@ -437,7 +442,7 @@ class TkinterFilesHandler:
                     for finfo in new[len(old):]:
                         self.lists_items['lists'][i].insert(0, '{fname-new} / {fname}'.format(**finfo))
             else:
-                k = 5
+                k = 2
                 for j, finfo in enumerate(new):
                     if j >= len(old) or finfo != old[j] or finfo['stage'] == 1:
                         stg_size = gradline(finfo['size'] / self.fh.settings['size-cooked'] * k, k)
@@ -477,5 +482,11 @@ class TkinterFilesHandler:
             self.root.after(dt, self.update)
 
 if __name__ == '__main__':
-    tfh = TkinterFilesHandler('asdf')
-    tfh.mainloop()
+	flag = 0
+	try:
+	    tfh = TkinterFilesHandler('asdf')
+	    tfh.mainloop()
+	    flag = 1
+	finally:
+		if not flag:
+			input('press enter to exit')
