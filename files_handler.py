@@ -57,20 +57,23 @@ import json
 # for ext:
 # [class]
 
+COSTYL_PATH=True
 base_settings = {
-    "source-folder": "/Users/dadd2/Documents/unreal_life/newEOS_base/src",
+    "source-folder": "/Users/dadd2/Documents/unreal_life/newEOS_base/srcb",
     "destination-folder": "/Users/dadd2/Documents/unreal_life/newEOS_base/dest",
-    "history-file": None, # "history.txt",
+    "history-file": None,  # "history.txt",
     "file-excluding-patterns": [r"^\.DS_Store$", r'\.tiff-'],
     "name-pattern": [
         '1-1-',
         ['int', 4, 1, False, False, ['qй', 'aф']],
         '-',
         ['int', 2, 1, False, True, ['wц', 'sы']],
-        ['var', ['', 'об'], 0, True, ['eу', 'dв']],
+        ['var', ['', 'а', 'б', 'в', 'г', 'д', 'е', 'ж', 'з', 'и', 'к', 'л', 'м', 'н', 'о', 'п', 'р', 'с', 'т', 'у',
+                 'ф', 'х', 'ц', 'ч', 'ш', 'ы', 'э', 'ю', 'я'], 0, True, ['eу', 'dв']],
+        ['var', ['', ' об', ' доп'], 0, True, ['rк', 'fа']],
         ['ext']
     ],
-    "size-cooked": 50000,
+    "size-cooked": 50,
     "cooking-time": 2.5,
     "reloading-delay": 10,
     "seconds-for-overload": 5,
@@ -91,6 +94,7 @@ def cut_not_digits(s):
 def fmove(src, dst, chunk=1024*512):
     """двигает файл (пока без обработки ошибок)"""
     assert isinstance(chunk, int) and chunk > 0
+    os.makedirs(os.path.split(dst)[0], exist_ok=True)
     with open(src, 'br') as srcfile:
         with open(dst, 'bw') as dstfile:
             while True:
@@ -102,7 +106,7 @@ def fmove(src, dst, chunk=1024*512):
     os.remove(src)
 
 
-def soft_open(path, mode='r', ok_callback = lambda f:f.read(), err_callback = lambda e: ''):
+def soft_open(path, mode='r', ok_callback=lambda f:f.read(), err_callback=lambda e: ''):
     """открывает файл; при успехе -- один колбэк, при ошибке -- второй"""
     try:
         with open(path, mode) as file:
@@ -143,6 +147,7 @@ class ConsoleUI:
 
     def set_incorrect(self, correct_flags):
         print('correct_flags:', correct_flags)
+
 
 class FilesHandler:
     """главный класс, который лежит под капотом у tkinterui, содержит всю логику отслеживания и управления файлами"""
@@ -189,17 +194,22 @@ class FilesHandler:
                 if re.search(pattern, fname):
                     break
             else:
-                st = os.stat(os.path.join(self.settings['source-folder'], fname))
-                result = {'ino': st.st_ino, 'size': st.st_size, 'stage': 0, 'fname': fname}
-                if is_first:
-                    # TODO вставить обработку опережения
-                    result['addtime'] = st.st_mtime
+                # FIXME если файл успел удалиться
+                try:
+                    st = os.stat(os.path.join(self.settings['source-folder'], fname))
+                except FileNotFoundError:
+                    pass
                 else:
-                    result['addtime'] = time.time()
-                if result['size'] > self.settings['size-cooked']:
-                    result['stage'] = 1
-                    result['mtime'] = result['addtime']
-                yield result
+                    result = {'ino': st.st_ino, 'size': st.st_size, 'stage': 0, 'fname': fname}
+                    if is_first:
+                        # TODO вставить обработку опережения
+                        result['addtime'] = st.st_mtime
+                    else:
+                        result['addtime'] = time.time()
+                    if result['size'] > self.settings['size-cooked']:
+                        result['stage'] = 1
+                        result['mtime'] = result['addtime']
+                    yield result
 
     # var supply: 0
     def mainloop_cycle(self):
@@ -377,15 +387,18 @@ class FilesHandler:
 
     # var supply: 0
     def modifiers_apply(self, modifiers, ext):
-        """возвращает готовое имя файла"""
+        """возвращает готовое имя файла
+        TODO: вынести ext.lower в файл конфигурации флагом"""
         result = ''
+        if COSTYL_PATH:
+            result += modifiers[0] + '/'
         i = 0
         for p in self.settings['name-pattern']:
             if isinstance(p, str):
                 result += p
             elif isinstance(p, list):
                 if p[0] == 'ext':
-                    result += ext
+                    result += ext.lower()
                 else:
                     result += modifiers[i]
                     i += 1
@@ -412,24 +425,38 @@ class FilesHandler:
         for i in intpatterns:
             modifiers[i] = int(modifiers[i])
         # print('modifier_increm ', index)
+        # ----------------- change by index
+        changes_flag = False
         if patterns[index][0] == 'int':
             newval = modifiers[index] + count
             if newval >= 0 and len(str(newval)) <= patterns[index][1]:
                 modifiers[index] += count
+                changes_flag = True
 
-                if not save_others:
-                    for i in range(intpatterns.index(index)+1, len(intpatterns)):
-                        modifiers[intpatterns[i]] = patterns[intpatterns[i]][2]
-                    for i in varpatterns:
-                        if patterns[i][3]:
-                            modifiers[i] = patterns[i][1][patterns[i][2]]
         elif patterns[index][0] == 'var':
             vars = patterns[index][1]
             # print('vars:', vars)
             modifiers[index] = vars[(vars.index(modifiers[index]) + count) % len(vars)]
+            changes_flag = True
             # print('result:', modifiers[index])
         else:
             raise NotImplementedError()
+        # ----------------- change others
+        if not save_others and changes_flag:
+            for i, p in enumerate(patterns):
+                if i > index:
+                    if p[0] == 'int':
+                        modifiers[i] = p[2]
+                    elif p[0] == 'var':
+                        modifiers[i] = p[1][p[2]]
+                    else:
+                        raise NotImplementedError()
+            if False:
+                for i in range(intpatterns.index(index) + 1, len(intpatterns)):
+                    modifiers[intpatterns[i]] = patterns[intpatterns[i]][2]
+                for i in varpatterns:
+                    if i > index:
+                        modifiers[i] = patterns[i][1][patterns[i][2]]
         self.ui.set_modifiers([str(x) for x in modifiers])
         self.correct()
         # print('incremed modifiers', modifiers)

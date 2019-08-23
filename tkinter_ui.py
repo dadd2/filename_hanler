@@ -38,8 +38,9 @@ for i in '0123456789abcdef':
     for j in '0123456789abcdef':
         HEX_ALPH.append(i+j)
 
-COOKING_GRADS = [[255, 255, 255], [100, 100, 255]]
-TIMING_GRADS = [[100, 100, 255], [150, 255, 150]]
+COOKING_GRADS = [[100, 100, 255], [255, 255, 255]]
+TIMING_GRADS = [[255, 255, 255], [150, 255, 150]]
+
 
 def gradline(x, k):
     if x > k:
@@ -50,8 +51,10 @@ def gradline(x, k):
         blocks += GRADS[int(x % 1 * (len(GRADS)))]
     return blocks + ' ' * (k - len(blocks))
 
+
 def hexcolor(rgb):
     return '#' + ''.join(HEX_ALPH[int(i)] for i in rgb)
+
 
 def gradient(a, b, x):
     if x < 0:
@@ -60,6 +63,7 @@ def gradient(a, b, x):
         x = 1
     return [a_ * (1-x) + b_ * x for a_, b_ in zip(a, b)]
 # print('-' + gradline(4,4) + '-')
+
 
 class ListDict(list):
     '''велосипед для collections.OrderedDict
@@ -132,7 +136,8 @@ class TkinterFilesHandler:
         self.root = Tk()
 
         self.root.geometry('{w}x{h}+{x}+{y}'.format(w=300, h=480, x=10, y=10))
-        self.root.minsize(height=300, width=300)
+        self.root.minsize(height=300, width=320)
+        self.root.geometry('{w}x{h}'.format(h=300, w=320))
         self.root.resizable(True, True)
         self.root.title('files handler by dadd2')
 
@@ -153,13 +158,13 @@ class TkinterFilesHandler:
         self.lists_frame.place(y=100, relwidth=1, height=-90, relheight=1)
 
         place_args = [   # TODO переназвать place_args понятнее
-            {'relheight': 0.4},
-            {'rely': .4, 'height': 90},
-            {'rely': .4, 'y': 90, 'relheight': .6, 'height': -90},
+            {'height': 60},
+            {'height': 60, 'y': 60},
+            {'y': 120, 'relheight': 1, 'height': -130},
         ]
         for i, place_arg in enumerate(place_args):
-            la = {'relwidth': 1, 'width': -30}
-            sa = {'relx': 1, 'x': -30, 'width': 30}
+            la = {'relwidth': 1, 'width': -15}
+            sa = {'anchor': 'ne', 'relx': 1}
             la.update(place_arg)
             sa.update(place_arg)
 
@@ -285,10 +290,13 @@ class TkinterFilesHandler:
         self.init_complete = False
         self.update()
 
+    # var supply: 0
     def focus_change_callback(self, newstate):
+        """изменяет цвет рамки для обозначения, активно ли окно"""
         assert newstate in (0, 1)
         # print('fcc', newstate, time.time())
         self.root['bg'] = ['white', 'blue'][newstate]
+
     # var supply: 0
     def button_elem_callback(self, btname):
         '''обработка вызова кнопок correct, reset, lock/unlock, pause/resume
@@ -458,12 +466,13 @@ class TkinterFilesHandler:
         grads2 = GRADS[1:] + GRADS[1:][::-1]
         self.stat_elems_collection['stats']['last_upd']['text'] = time.strftime('%T') + ' ' + grads2[int(time.time() % 1 * (len(grads2)))]
         newtime = time.time()
-        self.stat_elems_collection['stats']['fps']['text'] = round(1 / (newtime - self.statistics['lasttime']), 1)
+        self.stat_elems_collection['stats']['fps']['text'] = str(round(1 / (newtime - self.statistics['lasttime']),
+                                                                       1)).zfill(4)
         self.statistics['lasttime'] = newtime
         # ------------ support loop
         self.root.update()
         if self.is_working:
-            dt = min(70, 100 - int((time.time()-t_gui)*100))
+            dt = max(70, 100 - int((time.time()-t_gui)*1000))
             # print(dt)
             self.root.after(dt, self.update)
 
